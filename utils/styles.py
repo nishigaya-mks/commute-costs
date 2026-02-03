@@ -78,11 +78,46 @@ MOBILE_CSS = """
     font-size: 1.5rem;
 }
 
-/* フォーム内の余白調整 */
+/* フォーム内の余白調整 - ダークモード対応 */
 .stForm {
     padding: 1rem;
     border-radius: 0.5rem;
-    background-color: #f8f9fa;
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+    .stForm {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    /* 入力フィールドの背景 */
+    .stNumberInput input,
+    .stTextInput input,
+    .stSelectbox > div > div {
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        color: inherit !important;
+    }
+}
+
+/* ライトモード */
+@media (prefers-color-scheme: light) {
+    .stForm {
+        background-color: #f8f9fa;
+    }
+}
+
+/* Streamlitのダークテーマ検出用（フォールバック） */
+[data-theme="dark"] .stForm,
+.stApp[data-theme="dark"] .stForm {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .stNumberInput input,
+[data-theme="dark"] .stTextInput input,
+.stApp[data-theme="dark"] .stNumberInput input,
+.stApp[data-theme="dark"] .stTextInput input {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: inherit !important;
 }
 </style>
 """
