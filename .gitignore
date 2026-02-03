@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
+secrets_for_cloud.txt
 *.env
