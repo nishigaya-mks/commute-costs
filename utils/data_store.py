@@ -146,7 +146,7 @@ def save_etc_history(data: dict) -> None:
         rows.append(row)
 
     if rows:
-        ws.update(f"A1:{chr(ord('A') + len(ETC_HEADERS) - 1)}{len(rows)}", rows)
+        ws.append_rows(rows, value_input_option='RAW')
 
     load_etc_history.clear()
 
