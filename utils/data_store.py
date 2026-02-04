@@ -117,7 +117,7 @@ def get_allowance_for_month(year: int, month: int) -> int:
 # === ETC履歴 ===
 
 ETC_HEADERS = ["id", "entry_datetime", "entry_ic", "exit_datetime", "exit_ic",
-               "toll_fee", "actual_payment", "discount_type", "vehicle_type", "route"]
+               "toll_fee", "actual_payment", "discount_type", "vehicle_type", "route", "status"]
 
 
 @st.cache_data(ttl=60)
@@ -145,40 +145,76 @@ def save_etc_history(data: dict) -> None:
         ws.append_row(row)
 
 
-def add_etc_records(records: list[dict]) -> tuple[int, int]:
+def add_etc_records(records: list[dict]) -> tuple[int, int, int]:
     """
-    ETC履歴に複数レコードを追加する（重複チェック付き）
+    ETC履歴に複数レコードを追加する（重複チェック・確定更新付き）
+
+    Returns:
+        tuple[int, int, int]: (追加件数, スキップ件数, 更新件数)
     """
     data = load_etc_history()
     existing = data.get("records", [])
 
-    existing_keys = {
-        (r["entry_datetime"], r["entry_ic"], r["exit_ic"], r["toll_fee"])
-        for r in existing
-    }
+    # 既存レコードをキー→(インデックス, レコード)のマップに
+    # キーは入口日時・入口IC・出口ICで判定（料金は変わる可能性があるため含めない）
+    existing_map = {}
+    for idx, r in enumerate(existing):
+        key = (r["entry_datetime"], r["entry_ic"], r["exit_ic"])
+        existing_map[key] = (idx, r)
 
     added = 0
     skipped = 0
+    updated = 0
     new_records = []
+    update_rows = []  # (行番号, 更新データ) のリスト
 
     for record in records:
-        key = (record["entry_datetime"], record["entry_ic"], record["exit_ic"], record["toll_fee"])
-        if key in existing_keys:
-            skipped += 1
-        else:
+        key = (record["entry_datetime"], record["entry_ic"], record["exit_ic"])
+        new_status = record.get("status", "")
+
+        if key not in existing_map:
+            # 新規レコード
             record["id"] = generate_id()
             new_records.append(record)
-            existing_keys.add(key)
+            existing_map[key] = (len(existing) + len(new_records) - 1, record)
             added += 1
+        else:
+            # 既存レコードあり
+            idx, existing_record = existing_map[key]
+            existing_status = existing_record.get("status", "")
+
+            # 確認中 → 確定 の場合のみ更新
+            if existing_status != "確定" and new_status == "確定":
+                # 既存レコードのIDを維持しつつ、料金情報を更新
+                updated_record = existing_record.copy()
+                updated_record["actual_payment"] = record.get("actual_payment", 0)
+                updated_record["toll_fee"] = record.get("toll_fee", 0)
+                updated_record["discount_type"] = record.get("discount_type", "")
+                updated_record["status"] = "確定"
+
+                # 行番号は1始まり、ヘッダー行があるので +2
+                row_num = idx + 2
+                update_rows.append((row_num, updated_record))
+                updated += 1
+            else:
+                skipped += 1
+
+    ws = _get_or_create_worksheet(WS_ETC_HISTORY, ETC_HEADERS)
+
+    # 既存レコードの更新
+    for row_num, record in update_rows:
+        row_data = [record.get(h, "") for h in ETC_HEADERS]
+        ws.update(f"A{row_num}:{chr(ord('A') + len(ETC_HEADERS) - 1)}{row_num}", [row_data])
 
     # 新規レコードを一括追加
     if new_records:
-        ws = _get_or_create_worksheet(WS_ETC_HISTORY, ETC_HEADERS)
         rows = [[record.get(h, "") for h in ETC_HEADERS] for record in new_records]
         ws.append_rows(rows)
+
+    if new_records or update_rows:
         load_etc_history.clear()
 
-    return added, skipped
+    return added, skipped, updated
 
 
 def get_etc_records_for_month(year: int, month: int) -> list[dict]:

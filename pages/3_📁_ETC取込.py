@@ -87,17 +87,19 @@ if uploaded_file is not None:
         st.subheader("プレビュー")
 
         df = pd.DataFrame(records)
-        df_display = df[["entry_datetime", "entry_ic", "exit_ic", "toll_fee", "actual_payment", "discount_type"]]
-        df_display.columns = ["入口日時", "入口IC", "出口IC", "通行料金", "支払額", "割引"]
+        df_display = df[["entry_datetime", "entry_ic", "exit_ic", "toll_fee", "actual_payment", "discount_type", "status"]]
+        df_display.columns = ["入口日時", "入口IC", "出口IC", "通行料金", "支払額", "割引", "ステータス"]
 
         st.dataframe(df_display, use_container_width=True, height=300)
 
         # 取込ボタン
         if st.button("取り込む", type="primary", use_container_width=True):
-            added, skipped = data_store.add_etc_records(records)
+            added, skipped, updated = data_store.add_etc_records(records)
 
             if added > 0:
                 st.success(f"{added}件のレコードを取り込みました")
+            if updated > 0:
+                st.success(f"{updated}件の確認中レコードを確定データで更新しました")
             if skipped > 0:
                 st.info(f"{skipped}件は重複のためスキップしました")
 
