@@ -67,6 +67,31 @@ def parse_discount_type(notes: str) -> str:
     return ""
 
 
+def parse_confirmation_status(notes: str) -> str:
+    """
+    備考欄から確定ステータスを抽出する
+
+    備考欄の形式: "確定;(帰り)" or "確認中;(行き)" など
+    セミコロン前の部分がステータス
+
+    Returns:
+        "確定" or "確認中" or "" (不明な場合)
+    """
+    if not notes:
+        return ""
+
+    # セミコロンで分割して最初の部分を取得
+    parts = notes.split(";")
+    status_part = parts[0].strip()
+
+    if "確定" in status_part:
+        return "確定"
+    if "確認中" in status_part:
+        return "確認中"
+
+    return ""
+
+
 def detect_format(first_data_line: str) -> tuple[str, bool]:
     """
     CSVのフォーマットを検出する
@@ -159,9 +184,10 @@ def parse_etc_csv(file_content: bytes | str, encoding: str = "cp932") -> list[di
             toll_fee = int(cols[8]) if cols[8] else 0
             actual_payment = int(cols[10]) if cols[10] else 0
 
-            # 備考から割引種別を抽出
+            # 備考から割引種別と確定ステータスを抽出
             notes = cols[14] if len(cols) > 14 else ""
             discount_type = parse_discount_type(notes)
+            status = parse_confirmation_status(notes)
 
             record = {
                 "entry_datetime": entry_datetime.isoformat(),
@@ -171,6 +197,7 @@ def parse_etc_csv(file_content: bytes | str, encoding: str = "cp932") -> list[di
                 "toll_fee": toll_fee,
                 "actual_payment": actual_payment,
                 "discount_type": discount_type,
+                "status": status,
             }
             records.append(record)
 
