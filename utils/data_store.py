@@ -160,13 +160,12 @@ def add_etc_records(records: list[dict]) -> tuple[int, int, int]:
     existing_map = {}
     for idx, r in enumerate(existing):
         key = (r["entry_datetime"], r["entry_ic"], r["exit_ic"])
-        existing_map[key] = (idx, r)
+        existing_map[key] = idx
 
     added = 0
     skipped = 0
     updated = 0
-    new_records = []
-    update_rows = []  # (行番号, 更新データ) のリスト
+    need_save = False
 
     for record in records:
         key = (record["entry_datetime"], record["entry_ic"], record["exit_ic"])
@@ -175,44 +174,30 @@ def add_etc_records(records: list[dict]) -> tuple[int, int, int]:
         if key not in existing_map:
             # 新規レコード
             record["id"] = generate_id()
-            new_records.append(record)
-            existing_map[key] = (len(existing) + len(new_records) - 1, record)
+            existing.append(record)
+            existing_map[key] = len(existing) - 1
             added += 1
+            need_save = True
         else:
             # 既存レコードあり
-            idx, existing_record = existing_map[key]
-            existing_status = existing_record.get("status", "")
+            idx = existing_map[key]
+            existing_status = existing[idx].get("status", "")
 
             # 確認中 → 確定 の場合のみ更新
             if existing_status != "確定" and new_status == "確定":
                 # 既存レコードのIDを維持しつつ、料金情報を更新
-                updated_record = existing_record.copy()
-                updated_record["actual_payment"] = record.get("actual_payment", 0)
-                updated_record["toll_fee"] = record.get("toll_fee", 0)
-                updated_record["discount_type"] = record.get("discount_type", "")
-                updated_record["status"] = "確定"
-
-                # 行番号は1始まり、ヘッダー行があるので +2
-                row_num = idx + 2
-                update_rows.append((row_num, updated_record))
+                existing[idx]["actual_payment"] = record.get("actual_payment", 0)
+                existing[idx]["toll_fee"] = record.get("toll_fee", 0)
+                existing[idx]["discount_type"] = record.get("discount_type", "")
+                existing[idx]["status"] = "確定"
                 updated += 1
+                need_save = True
             else:
                 skipped += 1
 
-    ws = _get_or_create_worksheet(WS_ETC_HISTORY, ETC_HEADERS)
-
-    # 既存レコードの更新
-    for row_num, record in update_rows:
-        row_data = [record.get(h, "") for h in ETC_HEADERS]
-        ws.update(f"A{row_num}:{chr(ord('A') + len(ETC_HEADERS) - 1)}{row_num}", [row_data])
-
-    # 新規レコードを一括追加
-    if new_records:
-        rows = [[record.get(h, "") for h in ETC_HEADERS] for record in new_records]
-        ws.append_rows(rows)
-
-    if new_records or update_rows:
-        load_etc_history.clear()
+    # 変更があれば全件書き直し
+    if need_save:
+        save_etc_history({"records": existing})
 
     return added, skipped, updated
 
