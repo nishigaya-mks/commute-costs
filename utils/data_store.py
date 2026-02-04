@@ -138,11 +138,17 @@ def save_etc_history(data: dict) -> None:
     """ETC履歴を保存する"""
     ws = _get_or_create_worksheet(WS_ETC_HISTORY, ETC_HEADERS)
     ws.clear()
-    ws.append_row(ETC_HEADERS)
 
+    # ヘッダー + 全データを一括で書き込み
+    rows = [ETC_HEADERS]
     for record in data.get("records", []):
         row = [record.get(h, "") for h in ETC_HEADERS]
-        ws.append_row(row)
+        rows.append(row)
+
+    if rows:
+        ws.update(f"A1:{chr(ord('A') + len(ETC_HEADERS) - 1)}{len(rows)}", rows)
+
+    load_etc_history.clear()
 
 
 def add_etc_records(records: list[dict]) -> tuple[int, int, int]:
