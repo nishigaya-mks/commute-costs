@@ -40,43 +40,78 @@ with tab1:
     with col2:
         balance_month = st.selectbox(
             "月",
-            options=list(range(1, 13)),
-            index=today.month - 1,
+            options=["-"] + list(range(1, 13)),
+            index=today.month,  # "-"が0番目なので、今月は index=month
             key="balance_month",
         )
 
     # 選択月のデータを取得
-    selected_ym = f"{balance_year}-{balance_month:02d}"
     history = calculator.get_monthly_balance_history(24)
 
     if history:
-        # 選択月のデータ
-        month_data = next((h for h in history if h['year_month'] == selected_ym), None)
+        if balance_month == "-":
+            # 年間合計
+            year_data = [h for h in history if h['year_month'].startswith(str(balance_year))
+                        and (h['allowance'] > 0 or h['etc_total'] > 0 or h['fuel_amount'] > 0)]
+            if year_data:
+                st.write(f"**{balance_year}年 合計**")
+                total_allowance = sum(h['allowance'] for h in year_data)
+                total_etc = sum(h['etc_total'] for h in year_data)
+                total_fuel = sum(h['fuel_amount'] for h in year_data)
+                total_balance = total_allowance - total_etc - total_fuel
+                total_days = sum(h['commute_days'] for h in year_data)
+                efficiencies = [h['fuel_efficiency'] for h in year_data if h.get('fuel_efficiency')]
+                avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
 
-        if month_data and (month_data['allowance'] > 0 or month_data['etc_total'] > 0 or month_data['fuel_amount'] > 0):
-            st.write(f"**{balance_year}年{balance_month}月**")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("支給額", f"¥{total_allowance:,}")
+                with col2:
+                    st.metric("高速代", f"¥{total_etc:,}")
+                with col3:
+                    st.metric("ガソリン代", f"¥{total_fuel:,}")
+                with col4:
+                    st.metric("差額", f"¥{total_balance:,}")
 
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("支給額", f"¥{month_data['allowance']:,}")
-            with col2:
-                st.metric("高速代", f"¥{month_data['etc_total']:,}")
-            with col3:
-                st.metric("ガソリン代", f"¥{month_data['fuel_amount']:,}")
-            with col4:
-                balance_color = "normal" if month_data['balance'] >= 0 else "inverse"
-                st.metric("差額", f"¥{month_data['balance']:,}", delta_color=balance_color)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("通勤日数", f"{month_data['commute_days']}日")
-            with col2:
-                if month_data.get('fuel_efficiency'):
-                    st.metric("燃費", f"{month_data['fuel_efficiency']:.1f} km/L")
-                else:
-                    st.metric("燃費", "---")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("通勤日数", f"{total_days}日")
+                with col2:
+                    if avg_efficiency > 0:
+                        st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
+                    else:
+                        st.metric("平均燃費", "---")
+            else:
+                st.info(f"{balance_year}年のデータはありません")
         else:
-            st.info(f"{balance_year}年{balance_month}月のデータはありません")
+            # 月別データ
+            selected_ym = f"{balance_year}-{balance_month:02d}"
+            month_data = next((h for h in history if h['year_month'] == selected_ym), None)
+
+            if month_data and (month_data['allowance'] > 0 or month_data['etc_total'] > 0 or month_data['fuel_amount'] > 0):
+                st.write(f"**{balance_year}年{balance_month}月**")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("支給額", f"¥{month_data['allowance']:,}")
+                with col2:
+                    st.metric("高速代", f"¥{month_data['etc_total']:,}")
+                with col3:
+                    st.metric("ガソリン代", f"¥{month_data['fuel_amount']:,}")
+                with col4:
+                    balance_color = "normal" if month_data['balance'] >= 0 else "inverse"
+                    st.metric("差額", f"¥{month_data['balance']:,}", delta_color=balance_color)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("通勤日数", f"{month_data['commute_days']}日")
+                with col2:
+                    if month_data.get('fuel_efficiency'):
+                        st.metric("燃費", f"{month_data['fuel_efficiency']:.1f} km/L")
+                    else:
+                        st.metric("燃費", "---")
+            else:
+                st.info(f"{balance_year}年{balance_month}月のデータはありません")
 
         # 履歴テーブル
         st.divider()
@@ -164,23 +199,36 @@ with tab2:
 
     col1, col2 = st.columns(2)
     with col1:
-        year = st.selectbox(
+        etc_year = st.selectbox(
             "年",
             options=list(range(today.year, today.year - 3, -1)),
             key="etc_year",
         )
     with col2:
-        month = st.selectbox(
+        etc_month = st.selectbox(
             "月",
-            options=list(range(1, 13)),
-            index=today.month - 1,
+            options=["-"] + list(range(1, 13)),
+            index=today.month,
             key="etc_month",
         )
 
-    records = data_store.get_etc_records_for_month(year, month)
+    # データ取得
+    all_etc = data_store.load_etc_history().get("records", [])
+
+    if etc_month == "-":
+        # 年間データ
+        records = [r for r in all_etc if r["entry_datetime"].startswith(str(etc_year))]
+        period_label = f"{etc_year}年"
+    else:
+        # 月別データ
+        selected_ym = f"{etc_year}-{etc_month:02d}"
+        records = [r for r in all_etc if r["entry_datetime"].startswith(selected_ym)]
+        period_label = f"{etc_year}年{etc_month}月"
 
     if records:
-        st.write(f"{len(records)}件")
+        # 日時でソート
+        records = sorted(records, key=lambda x: x["entry_datetime"], reverse=True)
+        st.write(f"**{period_label}** {len(records)}件")
 
         df = pd.DataFrame(records)
         df_display = df[["entry_datetime", "entry_ic", "exit_ic", "toll_fee", "actual_payment", "discount_type"]]
@@ -195,7 +243,7 @@ with tab2:
             },
         )
 
-        # 月合計
+        # 合計
         total_toll = sum(r["toll_fee"] for r in records)
         total_payment = sum(r["actual_payment"] for r in records)
         unique_days = len({datetime.fromisoformat(r["entry_datetime"]).date() for r in records})
@@ -208,7 +256,7 @@ with tab2:
         with col3:
             st.metric("通勤日数", f"{unique_days}日")
     else:
-        st.info(f"{year}年{month}月のETC履歴はありません")
+        st.info(f"{period_label}のETC履歴はありません")
 
     # 累計表示
     st.divider()
@@ -268,21 +316,28 @@ with tab3:
     with col2:
         fuel_month = st.selectbox(
             "月",
-            options=list(range(1, 13)),
-            index=today.month - 1,
+            options=["-"] + list(range(1, 13)),
+            index=today.month,
             key="fuel_month",
         )
 
     refueling_data = data_store.load_refueling()
     all_records = refueling_data.get("records", [])
 
-    # 選択月のデータをフィルタ
-    selected_ym = f"{fuel_year}-{fuel_month:02d}"
-    month_records = [r for r in all_records if r["date"].startswith(selected_ym)]
+    # データをフィルタ
+    if fuel_month == "-":
+        # 年間データ
+        filtered_records = [r for r in all_records if r["date"].startswith(str(fuel_year))]
+        period_label = f"{fuel_year}年"
+    else:
+        # 月別データ
+        selected_ym = f"{fuel_year}-{fuel_month:02d}"
+        filtered_records = [r for r in all_records if r["date"].startswith(selected_ym)]
+        period_label = f"{fuel_year}年{fuel_month}月"
 
-    if month_records:
-        sorted_records = sorted(month_records, key=lambda x: x["date"], reverse=True)
-        st.write(f"{len(sorted_records)}件")
+    if filtered_records:
+        sorted_records = sorted(filtered_records, key=lambda x: x["date"], reverse=True)
+        st.write(f"**{period_label}** {len(sorted_records)}件")
 
         df = pd.DataFrame(sorted_records)
         df_display = df[["date", "odometer", "liters", "amount", "fuel_efficiency"]]
@@ -299,24 +354,24 @@ with tab3:
             },
         )
 
-        # 月合計
-        month_liters = sum(r["liters"] for r in month_records)
-        month_amount = sum(r["amount"] for r in month_records)
-        month_efficiencies = [r["fuel_efficiency"] for r in month_records if r.get("fuel_efficiency")]
-        month_avg_efficiency = sum(month_efficiencies) / len(month_efficiencies) if month_efficiencies else 0
+        # 合計
+        total_liters = sum(r["liters"] for r in filtered_records)
+        total_amount = sum(r["amount"] for r in filtered_records)
+        efficiencies = [r["fuel_efficiency"] for r in filtered_records if r.get("fuel_efficiency")]
+        avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("給油量合計", f"{month_liters:.1f} L")
+            st.metric("給油量合計", f"{total_liters:.1f} L")
         with col2:
-            st.metric("金額合計", f"¥{month_amount:,}")
+            st.metric("金額合計", f"¥{total_amount:,}")
         with col3:
-            if month_avg_efficiency > 0:
-                st.metric("平均燃費", f"{month_avg_efficiency:.1f} km/L")
+            if avg_efficiency > 0:
+                st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
             else:
                 st.metric("平均燃費", "---")
     else:
-        st.info(f"{fuel_year}年{fuel_month}月の給油記録はありません")
+        st.info(f"{period_label}の給油記録はありません")
 
     # 累計表示
     st.divider()
