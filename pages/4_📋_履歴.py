@@ -63,15 +63,33 @@ with tab1:
                 },
             )
 
-            # 年間合計
-            st.subheader(f"{today.year}年 累計")
-            current_year_data = [h for h in valid_history if h['year_month'].startswith(str(today.year))]
-            if current_year_data:
-                total_allowance = sum(h['allowance'] for h in current_year_data)
-                total_etc = sum(h['etc_total'] for h in current_year_data)
-                total_fuel = sum(h['fuel_amount'] for h in current_year_data)
+            # 累計表示
+            st.subheader("累計")
+            period_option = st.radio(
+                "期間",
+                ["今月", "今年", "すべて"],
+                horizontal=True,
+                key="balance_period"
+            )
+
+            if period_option == "今月":
+                current_ym = f"{today.year}-{today.month:02d}"
+                filter_data = [h for h in valid_history if h['year_month'] == current_ym]
+                period_label = f"{today.year}年{today.month}月"
+            elif period_option == "今年":
+                filter_data = [h for h in valid_history if h['year_month'].startswith(str(today.year))]
+                period_label = f"{today.year}年"
+            else:
+                filter_data = valid_history
+                period_label = "全期間"
+
+            if filter_data:
+                total_allowance = sum(h['allowance'] for h in filter_data)
+                total_etc = sum(h['etc_total'] for h in filter_data)
+                total_fuel = sum(h['fuel_amount'] for h in filter_data)
                 total_balance = total_allowance - total_etc - total_fuel
 
+                st.caption(f"📅 {period_label}")
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("累計支給", f"¥{total_allowance:,}")
@@ -81,6 +99,8 @@ with tab1:
                     st.metric("累計ガソリン代", f"¥{total_fuel:,}")
                 with col4:
                     st.metric("累計差額", f"¥{total_balance:,}")
+            else:
+                st.info(f"{period_label}のデータがありません")
         else:
             st.info("データがありません")
     else:
@@ -140,10 +160,52 @@ with tab2:
     else:
         st.info(f"{year}年{month}月のETC履歴はありません")
 
+    # 累計表示
+    st.divider()
+    st.subheader("累計")
+    etc_period = st.radio(
+        "期間",
+        ["今月", "今年", "すべて"],
+        horizontal=True,
+        key="etc_period"
+    )
+
+    all_etc = data_store.load_etc_history().get("records", [])
+    if all_etc:
+        if etc_period == "今月":
+            current_ym = f"{today.year}-{today.month:02d}"
+            filter_etc = [r for r in all_etc if r["entry_datetime"].startswith(current_ym)]
+            period_label = f"{today.year}年{today.month}月"
+        elif etc_period == "今年":
+            filter_etc = [r for r in all_etc if r["entry_datetime"].startswith(str(today.year))]
+            period_label = f"{today.year}年"
+        else:
+            filter_etc = all_etc
+            period_label = "全期間"
+
+        if filter_etc:
+            etc_total_toll = sum(r["toll_fee"] for r in filter_etc)
+            etc_total_payment = sum(r["actual_payment"] for r in filter_etc)
+            etc_unique_days = len({datetime.fromisoformat(r["entry_datetime"]).date() for r in filter_etc})
+
+            st.caption(f"📅 {period_label}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("累計通行料金", f"¥{etc_total_toll:,}")
+            with col2:
+                st.metric("累計支払額", f"¥{etc_total_payment:,}")
+            with col3:
+                st.metric("累計通勤日数", f"{etc_unique_days}日")
+        else:
+            st.info(f"{period_label}のデータがありません")
+    else:
+        st.info("ETC履歴がありません")
+
 # --- 給油記録 ---
 with tab3:
     st.header("給油記録")
 
+    today = date.today()
     refueling_data = data_store.load_refueling()
     records = refueling_data.get("records", [])
 
@@ -165,19 +227,41 @@ with tab3:
             },
         )
 
-        # 統計
-        total_liters = sum(r["liters"] for r in records)
-        total_amount = sum(r["amount"] for r in records)
-        efficiencies = [r["fuel_efficiency"] for r in records if r.get("fuel_efficiency")]
-        avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
-
+        # 累計表示
         st.subheader("累計")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("総給油量", f"{total_liters:.1f} L")
-        with col2:
-            st.metric("総額", f"¥{total_amount:,}")
-        with col3:
-            st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
+        fuel_period = st.radio(
+            "期間",
+            ["今月", "今年", "すべて"],
+            horizontal=True,
+            key="fuel_period"
+        )
+
+        if fuel_period == "今月":
+            current_ym = f"{today.year}-{today.month:02d}"
+            filter_fuel = [r for r in records if r["date"].startswith(current_ym)]
+            period_label = f"{today.year}年{today.month}月"
+        elif fuel_period == "今年":
+            filter_fuel = [r for r in records if r["date"].startswith(str(today.year))]
+            period_label = f"{today.year}年"
+        else:
+            filter_fuel = records
+            period_label = "全期間"
+
+        if filter_fuel:
+            total_liters = sum(r["liters"] for r in filter_fuel)
+            total_amount = sum(r["amount"] for r in filter_fuel)
+            efficiencies = [r["fuel_efficiency"] for r in filter_fuel if r.get("fuel_efficiency")]
+            avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
+
+            st.caption(f"📅 {period_label}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("総給油量", f"{total_liters:.1f} L")
+            with col2:
+                st.metric("総額", f"¥{total_amount:,}")
+            with col3:
+                st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
+        else:
+            st.info(f"{period_label}のデータがありません")
     else:
         st.info("給油記録がありません")
