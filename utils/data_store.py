@@ -262,11 +262,17 @@ def save_refueling(data: dict) -> None:
     """給油記録を保存する"""
     ws = _get_or_create_worksheet(WS_REFUELING, REFUEL_HEADERS)
     ws.clear()
-    ws.append_row(REFUEL_HEADERS)
 
+    # ヘッダー + 全データを一括で書き込み
+    rows = [REFUEL_HEADERS]
     for record in data.get("records", []):
         row = [record.get(h, "") for h in REFUEL_HEADERS]
-        ws.append_row(row)
+        rows.append(row)
+
+    if rows:
+        ws.append_rows(rows, value_input_option='RAW')
+
+    load_refueling.clear()
 
 
 def add_refueling_record(record: dict) -> str:
@@ -276,20 +282,79 @@ def add_refueling_record(record: dict) -> str:
 
     record["id"] = generate_id()
 
-    # 燃費計算: 前回の記録があれば計算
-    if records:
-        prev = max(records, key=lambda x: x["date"])
-        if prev["odometer"] < record["odometer"]:
-            distance = record["odometer"] - prev["odometer"]
-            record["fuel_efficiency"] = round(distance / record["liters"], 2)
+    # レコードを追加して燃費を再計算
+    records.append(record)
+    records = recalculate_fuel_efficiency(records)
 
-    # 直接シートに追加
-    ws = _get_or_create_worksheet(WS_REFUELING, REFUEL_HEADERS)
-    row = [record.get(h, "") for h in REFUEL_HEADERS]
-    ws.append_row(row)
-    load_refueling.clear()
+    # 全件保存
+    save_refueling({"records": records})
 
     return record["id"]
+
+
+def update_refueling_record(record_id: str, updated_data: dict) -> bool:
+    """給油記録を更新する"""
+    data = load_refueling()
+    records = data.get("records", [])
+
+    # 該当レコードを探して更新
+    found = False
+    for r in records:
+        if r.get("id") == record_id:
+            r.update(updated_data)
+            found = True
+            break
+
+    if not found:
+        return False
+
+    # 燃費を再計算して保存
+    records = recalculate_fuel_efficiency(records)
+    save_refueling({"records": records})
+    return True
+
+
+def delete_refueling_record(record_id: str) -> bool:
+    """給油記録を削除する"""
+    data = load_refueling()
+    records = data.get("records", [])
+
+    # 該当レコードを削除
+    new_records = [r for r in records if r.get("id") != record_id]
+
+    if len(new_records) == len(records):
+        return False  # 削除対象が見つからなかった
+
+    # 燃費を再計算して保存
+    new_records = recalculate_fuel_efficiency(new_records)
+    save_refueling({"records": new_records})
+    return True
+
+
+def recalculate_fuel_efficiency(records: list[dict]) -> list[dict]:
+    """全レコードの燃費を日付順に再計算する"""
+    if not records:
+        return records
+
+    # 日付とオドメーターでソート
+    sorted_records = sorted(records, key=lambda x: (x["date"], x["odometer"]))
+
+    # 最初のレコードは燃費計算不可
+    if sorted_records:
+        sorted_records[0]["fuel_efficiency"] = None
+
+    # 2番目以降は前のレコードとの差分で計算
+    for i in range(1, len(sorted_records)):
+        prev = sorted_records[i - 1]
+        curr = sorted_records[i]
+
+        if prev["odometer"] < curr["odometer"] and curr["liters"] > 0:
+            distance = curr["odometer"] - prev["odometer"]
+            curr["fuel_efficiency"] = round(distance / curr["liters"], 2)
+        else:
+            curr["fuel_efficiency"] = None
+
+    return sorted_records
 
 
 def get_refueling_records_for_month(year: int, month: int) -> list[dict]:
