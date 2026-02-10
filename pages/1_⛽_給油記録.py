@@ -135,6 +135,10 @@ st.subheader("直近の給油記録")
 refueling_data = data_store.load_refueling()
 records = refueling_data.get("records", [])
 
+# distance未計算のレコードがあれば再計算で補完
+if records and any("distance" not in r for r in records):
+    records = data_store.recalculate_fuel_efficiency(records)
+
 if records:
     # 日付の新しい順にソート
     sorted_records = sorted(records, key=lambda x: x["date"], reverse=True)[:10]
@@ -150,17 +154,22 @@ if records:
             station_name = record.get("station", "")
             st.markdown(f"**📅 {record['date']}** {station_name}")
 
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
             with col1:
                 st.caption(f"⛽ {record['liters']:.1f} L")
             with col2:
                 st.caption(f"💰 ¥{record['amount']:,}")
             with col3:
+                if record.get("distance"):
+                    st.caption(f"🛣️ {record['distance']:,} km")
+                else:
+                    st.caption("🛣️ ---")
+            with col4:
                 if record.get("fuel_efficiency"):
                     st.caption(f"📊 {record['fuel_efficiency']} km/L")
                 else:
                     st.caption("📊 ---")
-            with col4:
+            with col5:
                 if st.button("✏️", key=f"edit_{record['id']}", help="編集"):
                     st.session_state["edit_record_id"] = record["id"]
                     st.rerun()

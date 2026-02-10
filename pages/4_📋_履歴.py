@@ -324,6 +324,10 @@ with tab3:
     refueling_data = data_store.load_refueling()
     all_records = refueling_data.get("records", [])
 
+    # distance未計算のレコードがあれば再計算で補完
+    if all_records and any("distance" not in r for r in all_records):
+        all_records = data_store.recalculate_fuel_efficiency(all_records)
+
     # データをフィルタ
     if fuel_month == "-":
         # 年間データ
@@ -340,8 +344,8 @@ with tab3:
         st.write(f"**{period_label}** {len(sorted_records)}件")
 
         df = pd.DataFrame(sorted_records)
-        df_display = df[["date", "odometer", "liters", "amount", "fuel_efficiency"]]
-        df_display.columns = ["日付", "オドメーター", "給油量", "金額", "燃費"]
+        df_display = df[["date", "odometer", "liters", "amount", "distance", "fuel_efficiency"]]
+        df_display.columns = ["日付", "オドメーター", "給油量", "金額", "走行距離", "燃費"]
 
         st.dataframe(
             df_display,
@@ -350,6 +354,7 @@ with tab3:
                 "オドメーター": st.column_config.NumberColumn(format="%d km"),
                 "給油量": st.column_config.NumberColumn(format="%.1f L"),
                 "金額": st.column_config.NumberColumn(format="¥%d"),
+                "走行距離": st.column_config.NumberColumn(format="%d km"),
                 "燃費": st.column_config.NumberColumn(format="%.1f km/L"),
             },
         )
@@ -357,15 +362,18 @@ with tab3:
         # 合計
         total_liters = sum(r["liters"] for r in filtered_records)
         total_amount = sum(r["amount"] for r in filtered_records)
+        total_distance = sum(r["distance"] for r in filtered_records if r.get("distance"))
         efficiencies = [r["fuel_efficiency"] for r in filtered_records if r.get("fuel_efficiency")]
         avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("給油量合計", f"{total_liters:.1f} L")
         with col2:
             st.metric("金額合計", f"¥{total_amount:,}")
         with col3:
+            st.metric("走行距離合計", f"{total_distance:,} km" if total_distance else "---")
+        with col4:
             if avg_efficiency > 0:
                 st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
             else:
@@ -398,16 +406,19 @@ with tab3:
         if filter_fuel:
             total_liters = sum(r["liters"] for r in filter_fuel)
             total_amount = sum(r["amount"] for r in filter_fuel)
+            total_distance = sum(r["distance"] for r in filter_fuel if r.get("distance"))
             efficiencies = [r["fuel_efficiency"] for r in filter_fuel if r.get("fuel_efficiency")]
             avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
 
             st.caption(f"📅 {period_label}")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("総給油量", f"{total_liters:.1f} L")
             with col2:
                 st.metric("総額", f"¥{total_amount:,}")
             with col3:
+                st.metric("総走行距離", f"{total_distance:,} km" if total_distance else "---")
+            with col4:
                 st.metric("平均燃費", f"{avg_efficiency:.1f} km/L")
         else:
             st.info(f"{period_label}のデータがありません")
