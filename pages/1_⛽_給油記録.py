@@ -136,7 +136,7 @@ refueling_data = data_store.load_refueling()
 records = refueling_data.get("records", [])
 
 # distance未計算のレコードがあれば再計算で補完
-if records and any("distance" not in r for r in records):
+if records and any(r.get("distance") is None and r.get("fuel_efficiency") is not None for r in records):
     records = data_store.recalculate_fuel_efficiency(records)
 
 if records:
