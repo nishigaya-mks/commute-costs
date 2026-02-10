@@ -238,7 +238,7 @@ def get_etc_total_for_month(year: int, month: int) -> int:
 # === 給油記録 ===
 
 REFUEL_HEADERS = ["id", "date", "odometer", "liters", "amount", "station",
-                  "unit_price", "fuel_efficiency"]
+                  "unit_price", "fuel_efficiency", "distance"]
 
 
 @st.cache_data(ttl=60)
@@ -254,6 +254,7 @@ def load_refueling() -> dict:
         r["amount"] = int(r.get("amount", 0) or 0)
         r["unit_price"] = float(r.get("unit_price", 0) or 0) if r.get("unit_price") else None
         r["fuel_efficiency"] = float(r.get("fuel_efficiency", 0) or 0) if r.get("fuel_efficiency") else None
+        r["distance"] = int(r.get("distance", 0) or 0) if r.get("distance") else None
 
     return {"records": records}
 
@@ -342,6 +343,7 @@ def recalculate_fuel_efficiency(records: list[dict]) -> list[dict]:
     # 最初のレコードは燃費計算不可
     if sorted_records:
         sorted_records[0]["fuel_efficiency"] = None
+        sorted_records[0]["distance"] = None
 
     # 2番目以降は前のレコードとの差分で計算
     for i in range(1, len(sorted_records)):
@@ -350,8 +352,10 @@ def recalculate_fuel_efficiency(records: list[dict]) -> list[dict]:
 
         if prev["odometer"] < curr["odometer"] and curr["liters"] > 0:
             distance = curr["odometer"] - prev["odometer"]
+            curr["distance"] = distance
             curr["fuel_efficiency"] = round(distance / curr["liters"], 2)
         else:
+            curr["distance"] = None
             curr["fuel_efficiency"] = None
 
     return sorted_records
