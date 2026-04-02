@@ -72,6 +72,21 @@ if monthly_data.get('cost_per_km'):
 if captions:
     st.caption("　".join(captions))
 
+# ランキング表示
+current_ym = f"{current_year:04d}-{current_month:02d}"
+balance_rank = calculator.get_monthly_balance_rank(current_ym)
+rank_parts = []
+if monthly_data.get('fuel_efficiency'):
+    fe_rank, fe_total = calculator.get_fuel_efficiency_rank(monthly_data['fuel_efficiency'])
+    if fe_total >= 2:
+        rank_parts.append(f"⛽ 燃費: {fe_total}回中 **{fe_rank}位**")
+if balance_rank:
+    b_rank, b_total = balance_rank
+    if b_total >= 2:
+        rank_parts.append(f"💰 差額: {b_total}ヶ月中 **{b_rank}位**")
+if rank_parts:
+    st.caption("🏆 " + "　".join(rank_parts))
+
 st.divider()
 
 # --- 年間累計 ---

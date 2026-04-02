@@ -173,3 +173,87 @@ def get_monthly_balance_history(months: int = 12) -> list[dict]:
         result.append(data)
 
     return result
+
+
+def get_fuel_efficiency_ranking() -> list[dict]:
+    """
+    燃費ランキング（良い順）を返す
+
+    Returns:
+        list[dict]: [{"date": 日付, "fuel_efficiency": 燃費, "rank": 順位}, ...]
+    """
+    data = data_store.load_refueling()
+    records = data.get("records", [])
+
+    with_efficiency = [
+        {"date": r["date"], "fuel_efficiency": r["fuel_efficiency"], "station": r.get("station", "")}
+        for r in records
+        if r.get("fuel_efficiency")
+    ]
+
+    sorted_records = sorted(with_efficiency, key=lambda x: x["fuel_efficiency"], reverse=True)
+    for i, r in enumerate(sorted_records):
+        r["rank"] = i + 1
+
+    return sorted_records
+
+
+def get_fuel_efficiency_rank(efficiency: float) -> tuple[int, int]:
+    """
+    指定した燃費の順位を返す
+
+    Returns:
+        tuple[int, int]: (順位, 総数)
+    """
+    ranking = get_fuel_efficiency_ranking()
+    total = len(ranking)
+    if total == 0:
+        return (1, 1)
+
+    rank = 1
+    for r in ranking:
+        if r["fuel_efficiency"] > efficiency:
+            rank += 1
+        else:
+            break
+
+    return (rank, total)
+
+
+def get_monthly_balance_ranking() -> list[dict]:
+    """
+    月別差額ランキング（黒字順）を返す（データがある月のみ）
+
+    Returns:
+        list[dict]: [{"year_month": 年月, "balance": 差額, "rank": 順位}, ...]
+    """
+    history = get_monthly_balance_history(24)
+    valid = [
+        {"year_month": h["year_month"], "balance": h["balance"]}
+        for h in history
+        if h["allowance"] > 0 or h["etc_total"] > 0 or h["fuel_amount"] > 0
+    ]
+
+    sorted_data = sorted(valid, key=lambda x: x["balance"], reverse=True)
+    for i, r in enumerate(sorted_data):
+        r["rank"] = i + 1
+
+    return sorted_data
+
+
+def get_monthly_balance_rank(year_month: str) -> tuple[int, int] | None:
+    """
+    指定月の差額の順位を返す
+
+    Returns:
+        tuple[int, int] | None: (順位, 総数) or None
+    """
+    ranking = get_monthly_balance_ranking()
+    if not ranking:
+        return None
+
+    for r in ranking:
+        if r["year_month"] == year_month:
+            return (r["rank"], len(ranking))
+
+    return None

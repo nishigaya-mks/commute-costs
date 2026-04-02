@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import data_store, styles
+from utils import data_store, calculator, styles
 
 st.set_page_config(
     page_title="給油記録 - 通勤費管理",
@@ -26,6 +26,23 @@ gas_stations = settings.get("gas_stations", [])
 # 前回の給油記録を取得（デフォルト値用）
 last_record = data_store.get_last_refueling_record()
 default_unit_price = last_record.get("unit_price", 160.0) if last_record else 160.0
+
+# 登録直後のフィードバック
+if st.session_state.pop("just_registered", False):
+    last = data_store.get_last_refueling_record()
+    if last and last.get("fuel_efficiency"):
+        rank, total = calculator.get_fuel_efficiency_rank(last["fuel_efficiency"])
+        if total >= 2:
+            if rank == 1:
+                st.success(f"✅ 登録しました！ 燃費 {last['fuel_efficiency']} km/L -- 歴代 **1位** です！")
+            elif rank <= 3:
+                st.success(f"✅ 登録しました！ 燃費 {last['fuel_efficiency']} km/L -- 歴代 **{rank}位** / {total}回中")
+            else:
+                st.success(f"✅ 登録しました！ 燃費 {last['fuel_efficiency']} km/L（{total}回中 {rank}位）")
+        else:
+            st.success("✅ 給油記録を登録しました")
+    else:
+        st.success("✅ 給油記録を登録しました")
 
 st.header("新規給油記録")
 
@@ -125,7 +142,8 @@ with st.form("refueling_form"):
                 "unit_price": round(amount / liters, 1),
             }
             record_id = data_store.add_refueling_record(record)
-            st.success("✅ 給油記録を登録しました")
+            # 登録後に燃費ランキングをフィードバック
+            st.session_state["just_registered"] = True
             st.rerun()
 
 # 前回の記録を表示
