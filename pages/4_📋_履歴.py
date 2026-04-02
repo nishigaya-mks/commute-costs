@@ -133,7 +133,7 @@ with tab1:
                 color = "green" if val >= 0 else "red"
                 return f"color: {color}"
 
-            styled_df = df.style.applymap(style_balance, subset=["差額"])
+            styled_df = df.style.map(style_balance, subset=["差額"])
 
             st.dataframe(
                 styled_df,
