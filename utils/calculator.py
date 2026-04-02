@@ -1,5 +1,7 @@
 """収支・燃費計算ロジック"""
 
+from __future__ import annotations
+
 from datetime import date
 from . import data_store
 
