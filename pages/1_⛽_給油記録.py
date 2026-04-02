@@ -169,7 +169,7 @@ if records:
             station_name = record.get("station", "")
             st.markdown(f"**📅 {record['date']}** {station_name}")
 
-            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 2, 1])
             with col1:
                 st.caption(f"⛽ {record['liters']:.1f} L")
             with col2:
@@ -185,6 +185,12 @@ if records:
                 else:
                     st.caption("📊 ---")
             with col5:
+                if record.get("distance") and record.get("amount"):
+                    cost_per_km = record["amount"] / record["distance"]
+                    st.caption(f"🔢 ¥{cost_per_km:.1f}/km")
+                else:
+                    st.caption("🔢 ---")
+            with col6:
                 if st.button("✏️", key=f"edit_{record['id']}", help="編集"):
                     st.session_state["edit_record_id"] = record["id"]
                     st.rerun()

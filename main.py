@@ -63,9 +63,14 @@ with row2_col2:
 # 通勤日数（参考情報）
 st.caption(f"📅 通勤日数: {monthly_data['commute_days']}日（ETC利用日数）")
 
-# 燃費情報
+# 燃費・キロ単価情報
+captions = []
 if monthly_data.get('fuel_efficiency'):
-    st.caption(f"⛽ 今月の平均燃費: {monthly_data['fuel_efficiency']} km/L")
+    captions.append(f"⛽ 平均燃費: {monthly_data['fuel_efficiency']} km/L")
+if monthly_data.get('cost_per_km'):
+    captions.append(f"💰 キロ単価: ¥{monthly_data['cost_per_km']:.1f}/km")
+if captions:
+    st.caption("　".join(captions))
 
 st.divider()
 

@@ -344,8 +344,11 @@ with tab3:
         st.write(f"**{period_label}** {len(sorted_records)}件")
 
         df = pd.DataFrame(sorted_records)
-        df_display = df[["date", "odometer", "liters", "amount", "distance", "fuel_efficiency"]]
-        df_display.columns = ["日付", "オドメーター", "給油量", "金額", "走行距離", "燃費"]
+        df["cost_per_km"] = df.apply(
+            lambda r: round(r["amount"] / r["distance"], 1) if r.get("distance") and r.get("amount") else None, axis=1
+        )
+        df_display = df[["date", "odometer", "liters", "amount", "distance", "fuel_efficiency", "cost_per_km"]]
+        df_display.columns = ["日付", "オドメーター", "給油量", "金額", "走行距離", "燃費", "キロ単価"]
 
         st.dataframe(
             df_display,
@@ -356,6 +359,7 @@ with tab3:
                 "金額": st.column_config.NumberColumn(format="¥%d"),
                 "走行距離": st.column_config.NumberColumn(format="%d km"),
                 "燃費": st.column_config.NumberColumn(format="%.1f km/L"),
+                "キロ単価": st.column_config.NumberColumn(format="¥%.1f/km"),
             },
         )
 

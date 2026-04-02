@@ -45,8 +45,15 @@ def calculate_monthly_balance(year: int, month: int) -> dict:
         fuel_efficiency = calculate_monthly_fuel_efficiency(year, month)
         source = "refueling"
 
+    # 走行距離（給油記録から）
+    refueling_records = data_store.get_refueling_records_for_month(year, month)
+    total_distance = sum(r["distance"] for r in refueling_records if r.get("distance"))
+
     # 収支計算
     balance = allowance - etc_total - fuel_amount
+
+    # キロ単価（ガソリン代 ÷ 走行距離）
+    cost_per_km = round(fuel_amount / total_distance, 1) if total_distance > 0 and fuel_amount > 0 else None
 
     return {
         "year_month": year_month,
@@ -56,6 +63,8 @@ def calculate_monthly_balance(year: int, month: int) -> dict:
         "balance": balance,
         "commute_days": commute_days,
         "fuel_efficiency": fuel_efficiency,
+        "total_distance": total_distance,
+        "cost_per_km": cost_per_km,
         "source": source,
     }
 
