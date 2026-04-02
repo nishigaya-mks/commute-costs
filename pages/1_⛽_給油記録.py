@@ -25,8 +25,19 @@ gas_stations = settings.get("gas_stations", [])
 
 # 前回の給油記録を取得（デフォルト値用）
 last_record = data_store.get_last_refueling_record()
+default_unit_price = last_record.get("unit_price", 160.0) if last_record else 160.0
 
 st.header("新規給油記録")
+
+# 単価入力（フォーム外でリアルタイム計算）
+unit_price = st.number_input(
+    "単価 (円/L)",
+    min_value=0.0,
+    value=float(default_unit_price),
+    step=0.5,
+    format="%.1f",
+    help="前回単価がデフォルト。変更すると金額が自動計算されます",
+)
 
 with st.form("refueling_form"):
     # 給油日
@@ -58,13 +69,16 @@ with st.form("refueling_form"):
         )
 
     # 数値入力を2列で表示
+    default_liters = float(last_record["liters"]) if last_record else 35.0
+    calculated_amount = int(unit_price * default_liters)
+
     col1, col2 = st.columns(2)
 
     with col1:
         liters = st.number_input(
             "給油量 (L)",
             min_value=0.0,
-            value=float(last_record["liters"]) if last_record else 35.0,
+            value=default_liters,
             step=0.5,
             format="%.1f",
         )
@@ -73,14 +87,15 @@ with st.form("refueling_form"):
         amount = st.number_input(
             "金額 (円)",
             min_value=0,
-            value=int(last_record["amount"]) if last_record else 5000,
+            value=calculated_amount,
             step=100,
+            help="単価×給油量で自動計算。手動変更も可",
         )
 
-    # 単価プレビュー
+    # 実際の単価プレビュー
     if liters > 0 and amount > 0:
-        unit_price = amount / liters
-        st.success(f"💰 単価: ¥{unit_price:.1f}/L")
+        actual_unit_price = amount / liters
+        st.success(f"💰 実単価: ¥{actual_unit_price:.1f}/L")
 
     # オドメーター
     odometer = st.number_input(
