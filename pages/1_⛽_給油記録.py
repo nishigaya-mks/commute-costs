@@ -199,89 +199,76 @@ if records:
 else:
     st.info("給油記録がありません")
 
-# 編集モード
-if "edit_record_id" in st.session_state:
-    edit_id = st.session_state["edit_record_id"]
-    edit_record = next((r for r in records if r.get("id") == edit_id), None)
+# 編集ダイアログ
+@st.dialog("📝 給油記録を編集")
+def edit_dialog(edit_record):
+    edit_id = edit_record["id"]
 
-    if edit_record:
-        st.divider()
-        st.subheader("📝 給油記録を編集")
+    edit_date = st.date_input(
+        "給油日",
+        value=datetime.strptime(edit_record["date"], "%Y-%m-%d").date(),
+    )
 
-        with st.form("edit_form"):
-            edit_date = st.date_input(
-                "給油日",
-                value=datetime.strptime(edit_record["date"], "%Y-%m-%d").date(),
-            )
+    if gas_stations:
+        try:
+            edit_station_index = gas_stations.index(edit_record.get("station", ""))
+        except ValueError:
+            edit_station_index = 0
+        edit_station = st.selectbox("給油所", options=gas_stations, index=edit_station_index)
+    else:
+        edit_station = st.text_input("給油所", value=edit_record.get("station", ""))
 
-            if gas_stations:
-                try:
-                    edit_station_index = gas_stations.index(edit_record.get("station", ""))
-                except ValueError:
-                    edit_station_index = 0
-                edit_station = st.selectbox("給油所", options=gas_stations, index=edit_station_index)
-            else:
-                edit_station = st.text_input("給油所", value=edit_record.get("station", ""))
+    col1, col2 = st.columns(2)
+    with col1:
+        edit_liters = st.number_input(
+            "給油量 (L)",
+            min_value=0.0,
+            value=float(edit_record["liters"]),
+            step=0.5,
+            format="%.1f",
+        )
+    with col2:
+        edit_amount = st.number_input(
+            "金額 (円)",
+            min_value=0,
+            value=int(edit_record["amount"]),
+            step=100,
+        )
 
-            col1, col2 = st.columns(2)
-            with col1:
-                edit_liters = st.number_input(
-                    "給油量 (L)",
-                    min_value=0.0,
-                    value=float(edit_record["liters"]),
-                    step=0.5,
-                    format="%.1f",
-                )
-            with col2:
-                edit_amount = st.number_input(
-                    "金額 (円)",
-                    min_value=0,
-                    value=int(edit_record["amount"]),
-                    step=100,
-                )
+    edit_odometer = st.number_input(
+        "オドメーター (km)",
+        min_value=0,
+        value=int(edit_record["odometer"]),
+        step=1,
+    )
 
-            edit_odometer = st.number_input(
-                "オドメーター (km)",
-                min_value=0,
-                value=int(edit_record["odometer"]),
-                step=1,
-            )
-
-            col_save, col_delete, col_cancel = st.columns(3)
-            with col_save:
-                save_clicked = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
-            with col_delete:
-                delete_clicked = st.form_submit_button("🗑️ 削除", use_container_width=True)
-            with col_cancel:
-                cancel_clicked = st.form_submit_button("キャンセル", use_container_width=True)
-
-            if save_clicked:
-                updated_data = {
-                    "date": edit_date.isoformat(),
-                    "odometer": edit_odometer,
-                    "liters": edit_liters,
-                    "amount": edit_amount,
-                    "station": edit_station if edit_station else None,
-                    "unit_price": round(edit_amount / edit_liters, 1) if edit_liters > 0 else 0,
-                }
-                if data_store.update_refueling_record(edit_id, updated_data):
-                    st.success("✅ 更新しました")
-                    del st.session_state["edit_record_id"]
-                    st.rerun()
-                else:
-                    st.error("更新に失敗しました")
-
-            if delete_clicked:
-                if data_store.delete_refueling_record(edit_id):
-                    st.success("🗑️ 削除しました")
-                    del st.session_state["edit_record_id"]
-                    st.rerun()
-                else:
-                    st.error("削除に失敗しました")
-
-            if cancel_clicked:
-                del st.session_state["edit_record_id"]
+    col_save, col_delete = st.columns(2)
+    with col_save:
+        if st.button("💾 保存", type="primary", use_container_width=True):
+            updated_data = {
+                "date": edit_date.isoformat(),
+                "odometer": edit_odometer,
+                "liters": edit_liters,
+                "amount": edit_amount,
+                "station": edit_station if edit_station else None,
+                "unit_price": round(edit_amount / edit_liters, 1) if edit_liters > 0 else 0,
+            }
+            if data_store.update_refueling_record(edit_id, updated_data):
                 st.rerun()
+            else:
+                st.error("更新に失敗しました")
+    with col_delete:
+        if st.button("🗑️ 削除", use_container_width=True):
+            if data_store.delete_refueling_record(edit_id):
+                st.rerun()
+            else:
+                st.error("削除に失敗しました")
+
+if "edit_record_id" in st.session_state:
+    edit_id = st.session_state.pop("edit_record_id")
+    edit_record = next((r for r in records if r.get("id") == edit_id), None)
+    if edit_record:
+        edit_dialog(edit_record)
 
 # 給油所未登録の場合の案内
 if not gas_stations:
