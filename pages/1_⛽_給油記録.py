@@ -64,7 +64,7 @@ with st.form("refueling_form"):
         liters = st.number_input(
             "給油量 (L)",
             min_value=0.0,
-            value=35.0,
+            value=float(last_record["liters"]) if last_record else 35.0,
             step=0.5,
             format="%.1f",
         )
@@ -73,7 +73,7 @@ with st.form("refueling_form"):
         amount = st.number_input(
             "金額 (円)",
             min_value=0,
-            value=5000,
+            value=int(last_record["amount"]) if last_record else 5000,
             step=100,
         )
 
