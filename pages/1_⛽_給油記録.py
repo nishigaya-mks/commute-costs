@@ -204,11 +204,6 @@ else:
 def edit_dialog(edit_record):
     edit_id = edit_record["id"]
 
-    edit_date = st.date_input(
-        "給油日",
-        value=datetime.strptime(edit_record["date"], "%Y-%m-%d").date(),
-    )
-
     if gas_stations:
         try:
             edit_station_index = gas_stations.index(edit_record.get("station", ""))
@@ -217,6 +212,11 @@ def edit_dialog(edit_record):
         edit_station = st.selectbox("給油所", options=gas_stations, index=edit_station_index)
     else:
         edit_station = st.text_input("給油所", value=edit_record.get("station", ""))
+
+    edit_date = st.date_input(
+        "給油日",
+        value=datetime.strptime(edit_record["date"], "%Y-%m-%d").date(),
+    )
 
     col1, col2 = st.columns(2)
     with col1:
