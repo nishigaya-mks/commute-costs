@@ -139,7 +139,7 @@ st.subheader("給油所を追加")
 with st.form("gas_station_form"):
     new_station = st.text_input(
         "給油所名",
-        placeholder="例: ENEOS 富浦SS",
+        placeholder="例: ENEOS 新宿SS",
     )
 
     if st.form_submit_button("追加"):
