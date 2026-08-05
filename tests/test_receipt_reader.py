@@ -101,3 +101,87 @@ class TestIsAvailable:
     def test_unavailable_when_key_missing(self, monkeypatch):
         monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: None)
         assert receipt_reader.is_available() is False
+
+
+def _fake_client_factory(payload, stop_reason="end_turn"):
+    """anthropic.Anthropic を差し替えるフェイク。payload を JSON で返す"""
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            self.last_kwargs = kwargs
+            return SimpleNamespace(
+                stop_reason=stop_reason,
+                content=[SimpleNamespace(type="text", text=json.dumps(payload))],
+            )
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.messages = FakeMessages()
+
+    return FakeClient
+
+
+GOOD_PAYLOAD = {
+    "date": "2026-08-06",
+    "station": "ENEOS",
+    "liters": 35.5,
+    "unit_price": 160.0,
+    "amount": 5680,
+}
+
+
+class TestExtractReceipt:
+    @pytest.fixture(autouse=True)
+    def _api_key(self, monkeypatch):
+        monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: "sk-ant-xxx")
+
+    def test_success_returns_parsed_dict(self, monkeypatch):
+        monkeypatch.setattr(
+            receipt_reader.anthropic, "Anthropic", _fake_client_factory(GOOD_PAYLOAD)
+        )
+        result = receipt_reader.extract_receipt(
+            _make_image_bytes(800, 600), ["ENEOS", "出光"]
+        )
+        assert result["date"] == "2026-08-06"
+        assert result["station"] == "ENEOS"
+        assert result["liters"] == 35.5
+        assert result["amount"] == 5680
+        assert "warning" not in result
+
+    def test_invalid_date_becomes_none(self, monkeypatch):
+        payload = dict(GOOD_PAYLOAD, date="26/08/06")
+        monkeypatch.setattr(
+            receipt_reader.anthropic, "Anthropic", _fake_client_factory(payload)
+        )
+        result = receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+        assert result["date"] is None
+
+    def test_all_null_raises(self, monkeypatch):
+        payload = {k: None for k in GOOD_PAYLOAD}
+        monkeypatch.setattr(
+            receipt_reader.anthropic, "Anthropic", _fake_client_factory(payload)
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_inconsistent_amount_sets_warning(self, monkeypatch):
+        payload = dict(GOOD_PAYLOAD, amount=9999)
+        monkeypatch.setattr(
+            receipt_reader.anthropic, "Anthropic", _fake_client_factory(payload)
+        )
+        result = receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+        assert result["warning"] is True
+
+    def test_refusal_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            receipt_reader.anthropic,
+            "Anthropic",
+            _fake_client_factory(GOOD_PAYLOAD, stop_reason="refusal"),
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_no_api_key_raises(self, monkeypatch):
+        monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: None)
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
