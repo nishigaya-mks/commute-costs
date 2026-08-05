@@ -2,7 +2,7 @@
 
 import io
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 MODEL = "claude-haiku-4-5"
 MAX_LONG_EDGE = 1100
@@ -20,6 +20,7 @@ def _shrink_image(image_bytes: bytes) -> bytes:
         img = Image.open(io.BytesIO(image_bytes))
     except Exception as e:
         raise ReceiptReadError("画像を開けませんでした") from e
+    img = ImageOps.exif_transpose(img)
     img = img.convert("RGB")
     w, h = img.size
     long_edge = max(w, h)

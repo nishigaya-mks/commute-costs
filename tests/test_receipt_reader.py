@@ -42,3 +42,14 @@ class TestShrinkImage:
     def test_broken_bytes_raise_receipt_read_error(self):
         with pytest.raises(receipt_reader.ReceiptReadError):
             receipt_reader._shrink_image(b"not an image")
+
+    def test_exif_orientation_is_applied(self):
+        # orientation=6 (90度回転) 付きの横長画像 → 縦長に変換されること
+        img = Image.new("RGB", (600, 400), color=(255, 255, 255))
+        exif = Image.Exif()
+        exif[274] = 6  # Orientation: Rotate 90 CW
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", exif=exif)
+        shrunk = receipt_reader._shrink_image(buf.getvalue())
+        out = Image.open(io.BytesIO(shrunk))
+        assert out.size == (400, 600)
