@@ -53,3 +53,33 @@ class TestShrinkImage:
         shrunk = receipt_reader._shrink_image(buf.getvalue())
         out = Image.open(io.BytesIO(shrunk))
         assert out.size == (400, 600)
+
+
+class TestCheckConsistency:
+    def test_consistent_values_no_warning(self):
+        result = {"liters": 35.0, "unit_price": 160.0, "amount": 5600}
+        out = receipt_reader._check_consistency(result)
+        assert "warning" not in out
+
+    def test_inconsistent_values_set_warning(self):
+        # 35.0 * 160.0 = 5600 に対し 7000 は ±2% を超える
+        result = {"liters": 35.0, "unit_price": 160.0, "amount": 7000}
+        out = receipt_reader._check_consistency(result)
+        assert out["warning"] is True
+
+    def test_missing_values_skip_check(self):
+        result = {"liters": None, "unit_price": 160.0, "amount": 5600}
+        out = receipt_reader._check_consistency(result)
+        assert "warning" not in out
+
+
+class TestValidateDate:
+    def test_valid_iso_date_passes(self):
+        assert receipt_reader._validate_date("2026-08-06") == "2026-08-06"
+
+    def test_invalid_date_returns_none(self):
+        assert receipt_reader._validate_date("2026/08/06") is None
+        assert receipt_reader._validate_date("令和8年8月6日") is None
+
+    def test_none_returns_none(self):
+        assert receipt_reader._validate_date(None) is None
