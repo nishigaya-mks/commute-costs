@@ -72,6 +72,11 @@ class TestCheckConsistency:
         out = receipt_reader._check_consistency(result)
         assert "warning" not in out
 
+    def test_negative_amount_sets_warning(self):
+        result = {"liters": 35.0, "unit_price": 160.0, "amount": -5600}
+        out = receipt_reader._check_consistency(result)
+        assert out["warning"] is True
+
 
 class TestValidateDate:
     def test_valid_iso_date_passes(self):
@@ -83,3 +88,6 @@ class TestValidateDate:
 
     def test_none_returns_none(self):
         assert receipt_reader._validate_date(None) is None
+
+    def test_non_padded_date_is_normalized(self):
+        assert receipt_reader._validate_date("2026-8-6") == "2026-08-06"

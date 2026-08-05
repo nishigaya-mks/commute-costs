@@ -39,17 +39,16 @@ def _check_consistency(result: dict) -> dict:
     unit_price = result.get("unit_price")
     amount = result.get("amount")
     if liters and unit_price and amount:
-        if abs(liters * unit_price - amount) / amount > AMOUNT_TOLERANCE:
+        if abs(liters * unit_price - amount) / abs(amount) > AMOUNT_TOLERANCE:
             result["warning"] = True
     return result
 
 
-def _validate_date(value):
-    """YYYY-MM-DD 形式ならそのまま、それ以外は None を返す"""
+def _validate_date(value: str | None) -> str | None:
+    """YYYY-MM-DD 形式に解釈できれば正規化して返し、それ以外は None を返す"""
     if not value:
         return None
     try:
-        datetime.strptime(value, "%Y-%m-%d")
-        return value
+        return datetime.strptime(value, "%Y-%m-%d").strftime("%Y-%m-%d")
     except ValueError:
         return None
