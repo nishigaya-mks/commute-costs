@@ -3,6 +3,7 @@
 import io
 from datetime import datetime
 
+import streamlit as st
 from PIL import Image, ImageOps
 
 MODEL = "claude-haiku-4-5"
@@ -52,3 +53,16 @@ def _validate_date(value: str | None) -> str | None:
         return datetime.strptime(value, "%Y-%m-%d").strftime("%Y-%m-%d")
     except ValueError:
         return None
+
+
+def _get_api_key():
+    """st.secrets から API キーを取得する。未設定なら None"""
+    try:
+        return st.secrets["anthropic"]["api_key"]
+    except (KeyError, FileNotFoundError):
+        return None
+
+
+def is_available() -> bool:
+    """レシート読み取り機能が使える状態か(API キー設定済みか)"""
+    return bool(_get_api_key())

@@ -91,3 +91,13 @@ class TestValidateDate:
 
     def test_non_padded_date_is_normalized(self):
         assert receipt_reader._validate_date("2026-8-6") == "2026-08-06"
+
+
+class TestIsAvailable:
+    def test_available_when_key_exists(self, monkeypatch):
+        monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: "sk-ant-xxx")
+        assert receipt_reader.is_available() is True
+
+    def test_unavailable_when_key_missing(self, monkeypatch):
+        monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: None)
+        assert receipt_reader.is_available() is False
