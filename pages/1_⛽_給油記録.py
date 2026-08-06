@@ -51,8 +51,10 @@ if receipt_reader.is_available():
         if receipt.get("warning"):
             st.warning("⚠️ 給油量×単価と金額が一致しません。値を確認してください")
 
-default_unit_price = receipt.get("unit_price") or (
-    last_record.get("unit_price", 160.0) if last_record else 160.0
+default_unit_price = (
+    receipt.get("unit_price")
+    if receipt.get("unit_price") is not None
+    else (last_record.get("unit_price", 160.0) if last_record else 160.0)
 )
 
 # 登録直後のフィードバック
@@ -87,7 +89,10 @@ unit_price = st.number_input(
 with st.form("refueling_form"):
     # 給油日
     if receipt.get("date"):
-        default_date = datetime.strptime(receipt["date"], "%Y-%m-%d").date()
+        try:
+            default_date = datetime.strptime(receipt["date"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            default_date = date.today()
     else:
         default_date = date.today()
     refuel_date = st.date_input(
@@ -121,11 +126,11 @@ with st.form("refueling_form"):
         )
 
     # 数値入力を2列で表示（レシート読取値を優先）
-    if receipt.get("liters"):
+    if receipt.get("liters") is not None:
         default_liters = float(receipt["liters"])
     else:
         default_liters = float(last_record["liters"]) if last_record else 35.0
-    if receipt.get("amount"):
+    if receipt.get("amount") is not None:
         calculated_amount = int(receipt["amount"])
     else:
         calculated_amount = int(unit_price * default_liters)
@@ -186,6 +191,7 @@ with st.form("refueling_form"):
             # 登録後に燃費ランキングをフィードバック
             st.session_state["just_registered"] = True
             st.session_state.pop("receipt_result", None)
+            st.session_state.pop("receipt_upload", None)
             st.rerun()
 
 # 前回の記録を表示
