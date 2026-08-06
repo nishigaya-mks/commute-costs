@@ -98,7 +98,7 @@ def _build_prompt(gas_stations: list) -> str:
         )
     return (
         "これはガソリンスタンドのレシートの写真です。以下の項目を抽出してください。\n"
-        "- date: 給油日(YYYY-MM-DD 形式に変換)\n"
+        "- date: 給油日(YYYY-MM-DD 形式に変換。和暦(令和など)や YY/MM/DD 表記も西暦 YYYY-MM-DD に変換)\n"
         "- station: 給油所名。" + station_note + "\n"
         "- liters: 給油量(リットル)\n"
         "- unit_price: ガソリン単価(円/L)\n"
@@ -158,6 +158,8 @@ def extract_receipt(image_bytes: bytes, gas_stations: list) -> dict:
         result = json.loads(text)
     except json.JSONDecodeError as e:
         raise ReceiptReadError("応答の解析に失敗しました") from e
+    if not isinstance(result, dict):
+        raise ReceiptReadError("応答の形式が不正でした")
 
     result["date"] = _validate_date(result.get("date"))
     if all(result.get(k) is None for k in ("date", "station", "liters", "unit_price", "amount")):

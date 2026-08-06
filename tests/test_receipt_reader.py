@@ -4,6 +4,8 @@ import io
 import json
 from types import SimpleNamespace
 
+import anthropic
+import httpx
 import pytest
 from PIL import Image
 
@@ -103,18 +105,30 @@ class TestIsAvailable:
         assert receipt_reader.is_available() is False
 
 
-def _fake_client_factory(payload, stop_reason="end_turn"):
-    """anthropic.Anthropic を差し替えるフェイク。payload を JSON で返す"""
+def _fake_client_factory(payload=None, stop_reason="end_turn", raise_error=None, content=None):
+    """anthropic.Anthropic を差し替えるフェイク。
+
+    - payload: JSON エンコードして単一テキストブロックとして返す
+    - content: 指定時は payload より優先し、content リストをそのまま返す
+      (空リストや不正テキストのテスト用)
+    - raise_error: 指定時は create() 呼び出し時にその例外を送出する
+    - FakeClient.captured_kwargs に create() へ渡された kwargs を記録する
+    """
 
     class FakeMessages:
         def create(self, **kwargs):
-            self.last_kwargs = kwargs
-            return SimpleNamespace(
-                stop_reason=stop_reason,
-                content=[SimpleNamespace(type="text", text=json.dumps(payload))],
-            )
+            FakeClient.captured_kwargs = kwargs
+            if raise_error is not None:
+                raise raise_error
+            if content is not None:
+                resp_content = content
+            else:
+                resp_content = [SimpleNamespace(type="text", text=json.dumps(payload))]
+            return SimpleNamespace(stop_reason=stop_reason, content=resp_content)
 
     class FakeClient:
+        captured_kwargs = None
+
         def __init__(self, api_key=None):
             self.messages = FakeMessages()
 
@@ -185,3 +199,68 @@ class TestExtractReceipt:
         monkeypatch.setattr(receipt_reader, "_get_api_key", lambda: None)
         with pytest.raises(receipt_reader.ReceiptReadError):
             receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_api_error_raises_receipt_read_error(self, monkeypatch):
+        error = anthropic.APIConnectionError(
+            request=httpx.Request("POST", "https://api.anthropic.com")
+        )
+        monkeypatch.setattr(
+            receipt_reader.anthropic,
+            "Anthropic",
+            _fake_client_factory(raise_error=error),
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_empty_content_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            receipt_reader.anthropic,
+            "Anthropic",
+            _fake_client_factory(content=[]),
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_invalid_json_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            receipt_reader.anthropic,
+            "Anthropic",
+            _fake_client_factory(content=[SimpleNamespace(type="text", text="not json")]),
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_non_dict_json_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            receipt_reader.anthropic,
+            "Anthropic",
+            _fake_client_factory(payload=[1, 2]),
+        )
+        with pytest.raises(receipt_reader.ReceiptReadError):
+            receipt_reader.extract_receipt(_make_image_bytes(800, 600), [])
+
+    def test_request_shape(self, monkeypatch):
+        fake_cls = _fake_client_factory(GOOD_PAYLOAD)
+        monkeypatch.setattr(receipt_reader.anthropic, "Anthropic", fake_cls)
+        receipt_reader.extract_receipt(_make_image_bytes(800, 600), ["ENEOS", "出光"])
+        kwargs = fake_cls.captured_kwargs
+        assert kwargs["model"] == receipt_reader.MODEL
+        assert kwargs["output_config"]["format"]["type"] == "json_schema"
+        assert kwargs["output_config"]["format"]["schema"] is receipt_reader.RECEIPT_SCHEMA
+        content = kwargs["messages"][0]["content"]
+        assert content[0]["type"] == "image"
+        assert content[0]["source"]["media_type"] == "image/jpeg"
+        prompt = content[1]["text"]
+        assert "ENEOS" in prompt and "出光" in prompt
+
+
+class TestBuildPrompt:
+    def test_empty_gas_stations_no_list_wording(self):
+        prompt = receipt_reader._build_prompt([])
+        assert "リスト" not in prompt
+
+    def test_with_gas_stations_includes_names_and_list_wording(self):
+        prompt = receipt_reader._build_prompt(["ENEOS", "出光"])
+        assert "ENEOS" in prompt
+        assert "出光" in prompt
+        assert "リスト" in prompt
