@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import data_store, calculator, styles
+from utils import data_store, calculator, styles, receipt_reader
 
 st.set_page_config(
     page_title="給油記録 - 通勤費管理",
@@ -25,7 +25,35 @@ gas_stations = settings.get("gas_stations", [])
 
 # 前回の給油記録を取得（デフォルト値用）
 last_record = data_store.get_last_refueling_record()
-default_unit_price = last_record.get("unit_price", 160.0) if last_record else 160.0
+
+# レシート読み取り結果（あればフォーム初期値に優先使用）
+receipt = st.session_state.get("receipt_result", {})
+
+if receipt_reader.is_available():
+    with st.expander("📷 レシートから読み取り", expanded=not receipt):
+        uploaded = st.file_uploader(
+            "レシート画像",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="receipt_upload",
+        )
+        if uploaded is not None and st.button("🔍 読み取り", use_container_width=True):
+            with st.spinner("読み取り中..."):
+                try:
+                    result = receipt_reader.extract_receipt(
+                        uploaded.getvalue(), gas_stations
+                    )
+                    st.session_state["receipt_result"] = result
+                    st.rerun()
+                except receipt_reader.ReceiptReadError as e:
+                    st.warning(f"⚠️ 読み取れませんでした。手入力してください({e})")
+    if receipt:
+        st.success("📷 レシートの読み取り結果をセットしました。内容を確認して登録してください")
+        if receipt.get("warning"):
+            st.warning("⚠️ 給油量×単価と金額が一致しません。値を確認してください")
+
+default_unit_price = receipt.get("unit_price") or (
+    last_record.get("unit_price", 160.0) if last_record else 160.0
+)
 
 # 登録直後のフィードバック
 if st.session_state.pop("just_registered", False):
@@ -58,18 +86,25 @@ unit_price = st.number_input(
 
 with st.form("refueling_form"):
     # 給油日
+    if receipt.get("date"):
+        default_date = datetime.strptime(receipt["date"], "%Y-%m-%d").date()
+    else:
+        default_date = date.today()
     refuel_date = st.date_input(
         "給油日",
-        value=date.today(),
+        value=default_date,
     )
 
     # 給油所選択
     if gas_stations:
-        # 前回の給油所をデフォルトに
+        # レシート読取値 > 前回の給油所 の順でデフォルトに
         default_index = 0
-        if last_record and last_record.get("station"):
+        station_candidate = receipt.get("station") or (
+            last_record.get("station") if last_record else None
+        )
+        if station_candidate:
             try:
-                default_index = gas_stations.index(last_record["station"])
+                default_index = gas_stations.index(station_candidate)
             except ValueError:
                 default_index = 0
 
@@ -85,9 +120,15 @@ with st.form("refueling_form"):
             help="設定画面で給油所を登録すると選択できます",
         )
 
-    # 数値入力を2列で表示
-    default_liters = float(last_record["liters"]) if last_record else 35.0
-    calculated_amount = int(unit_price * default_liters)
+    # 数値入力を2列で表示（レシート読取値を優先）
+    if receipt.get("liters"):
+        default_liters = float(receipt["liters"])
+    else:
+        default_liters = float(last_record["liters"]) if last_record else 35.0
+    if receipt.get("amount"):
+        calculated_amount = int(receipt["amount"])
+    else:
+        calculated_amount = int(unit_price * default_liters)
 
     col1, col2 = st.columns(2)
 
@@ -144,6 +185,7 @@ with st.form("refueling_form"):
             record_id = data_store.add_refueling_record(record)
             # 登録後に燃費ランキングをフィードバック
             st.session_state["just_registered"] = True
+            st.session_state.pop("receipt_result", None)
             st.rerun()
 
 # 前回の記録を表示
