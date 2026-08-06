@@ -63,6 +63,22 @@ url = "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
 
 ---
 
+## レシート読み取り機能（任意）
+
+給油レシート画像を Claude API で読み取り、給油記録フォームに自動入力する機能。
+
+1. Anthropic の API キーを用意する（https://console.anthropic.com/）
+2. Streamlit Cloud の Settings → Secrets（ローカルは `.streamlit/secrets.toml`）に以下を追記:
+
+   ```toml
+   [anthropic]
+   api_key = "sk-ant-..."
+   ```
+
+未設定の場合、給油記録ページに読み取り UI は表示されない（他機能への影響なし）。
+
+---
+
 ## トラブルシューティング
 
 ### 「gspread.exceptions.SpreadsheetNotFound」エラー

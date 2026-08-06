@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import data_store, calculator, styles, receipt_reader
+from utils import data_store, calculator, styles
+
+try:
+    from utils import receipt_reader
+except ImportError:
+    receipt_reader = None  # ローカル版など receipt_reader 未導入環境では機能を無効化
 
 st.set_page_config(
     page_title="給油記録 - 通勤費管理",
@@ -26,10 +31,13 @@ gas_stations = settings.get("gas_stations", [])
 # 前回の給油記録を取得（デフォルト値用）
 last_record = data_store.get_last_refueling_record()
 
+if receipt_reader is None or not receipt_reader.is_available():
+    st.session_state.pop("receipt_result", None)
+
 # レシート読み取り結果（あればフォーム初期値に優先使用）
 receipt = st.session_state.get("receipt_result", {})
 
-if receipt_reader.is_available():
+if receipt_reader is not None and receipt_reader.is_available():
     with st.expander("📷 レシートから読み取り", expanded=not receipt):
         uploaded = st.file_uploader(
             "レシート画像",
@@ -46,6 +54,8 @@ if receipt_reader.is_available():
                     st.rerun()
                 except receipt_reader.ReceiptReadError as e:
                     st.warning(f"⚠️ 読み取れませんでした。手入力してください({e})")
+                except Exception:
+                    st.warning("⚠️ 読み取り中に予期しないエラーが発生しました。手入力してください")
     if receipt:
         st.success("📷 レシートの読み取り結果をセットしました。内容を確認して登録してください")
         if receipt.get("warning"):
