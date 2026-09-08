@@ -14,12 +14,13 @@ import re
 import sys
 import time
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 # スリープ画面の復帰ボタン（文言は Streamlit 側の変更に備えて緩めに一致させる）
 WAKE_BUTTON_PATTERN = re.compile(r"get this app back up", re.IGNORECASE)
 # アプリ本体が描画されたと判断するセレクタ
+# 注意: *.streamlit.app はアプリ本体を iframe 内に描画するため、
+# メインフレームだけでなく全フレームを走査して探す必要がある。
 APP_SELECTOR = '[data-testid="stAppViewContainer"], [data-testid="stApp"]'
 
 WAKE_TIMEOUT_MS = int(os.environ.get("KEEP_ALIVE_WAKE_TIMEOUT_MS", "180000"))
@@ -28,6 +29,31 @@ LINGER_SECONDS = int(os.environ.get("KEEP_ALIVE_LINGER_SECONDS", "15"))
 
 def log(message: str) -> None:
     print(f"[keep-alive] {message}", flush=True)
+
+
+def app_is_rendered(page) -> bool:
+    """全フレームを走査してアプリ本体のコンテナが存在するか調べる。"""
+    for frame in page.frames:
+        try:
+            if frame.query_selector(APP_SELECTOR):
+                return True
+        except Exception:
+            # ナビゲーション中に frame がデタッチされることがあるので無視して続行
+            continue
+    return False
+
+
+def click_wake_button(page) -> bool:
+    """スリープ画面の復帰ボタンを全フレームから探してクリックする。"""
+    for frame in page.frames:
+        try:
+            button = frame.get_by_role("button", name=WAKE_BUTTON_PATTERN)
+            if button.count() > 0:
+                button.first.click()
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def keep_alive(url: str) -> bool:
@@ -39,18 +65,17 @@ def keep_alive(url: str) -> bool:
             page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             page.wait_for_timeout(5_000)
 
-            wake_button = page.get_by_role("button", name=WAKE_BUTTON_PATTERN)
-            if wake_button.count() > 0:
-                log("app is sleeping -> click wake button")
-                wake_button.first.click()
+            if click_wake_button(page):
+                log("app is sleeping -> clicked wake button")
             else:
                 log("wake button not found (app is probably awake)")
 
-            try:
-                page.wait_for_selector(APP_SELECTOR, timeout=WAKE_TIMEOUT_MS)
-            except PlaywrightTimeoutError:
-                log("ERROR: app did not render within timeout")
-                return False
+            deadline = time.monotonic() + WAKE_TIMEOUT_MS / 1000
+            while not app_is_rendered(page):
+                if time.monotonic() >= deadline:
+                    log("ERROR: app did not render within timeout")
+                    return False
+                page.wait_for_timeout(2_000)
 
             log(f"app rendered; linger {LINGER_SECONDS}s so the visit is counted")
             time.sleep(LINGER_SECONDS)
