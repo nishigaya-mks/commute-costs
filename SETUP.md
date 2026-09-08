@@ -63,6 +63,27 @@ url = "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
 
 ---
 
+## スリープ対策（推奨）
+
+Streamlit Community Cloud の無料枠は、一定時間（目安 12 時間）アクセスがないとアプリをスリープさせる。
+スリープ後の初回アクセスは復帰ボタンを押してから起動完了まで 1〜2 分かかる。
+
+このリポジトリには、6 時間ごとにヘッドレスブラウザでアプリを開いてスリープを防ぐ
+GitHub Actions（`.github/workflows/keep-alive.yml`）が入っている。有効化するには:
+
+1. GitHub のリポジトリ → Settings → Secrets and variables → Actions → **Variables** タブ
+2. 「New repository variable」で以下を登録:
+   - Name: `STREAMLIT_APP_URL`
+   - Value: デプロイ済みアプリの URL（例: `https://xxxx.streamlit.app`）
+3. Actions タブ → 「Keep Streamlit app awake」→ 「Run workflow」で一度手動実行し、成功することを確認
+
+補足:
+- 単純な HTTP GET（curl 等）では静的 HTML が返るだけで Python 側は起動しないため、Playwright で実際にページを開いている。
+- GitHub Actions のスケジュール実行は、リポジトリに 60 日間コミットがないと自動で無効化される。無効化された場合は Actions タブから再有効化する。
+- スリープ画面が出た場合の起動時間そのものは短くできない。起動時間が気になる場合は、常時稼働の有料ホスティング（Streamlit Community Cloud 有料枠、Cloud Run 等）への移行を検討する。
+
+---
+
 ## レシート読み取り機能（任意）
 
 給油レシート画像を Claude API で読み取り、給油記録フォームに自動入力する機能。
