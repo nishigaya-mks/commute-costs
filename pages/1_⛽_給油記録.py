@@ -44,11 +44,19 @@ if receipt_reader is not None and receipt_reader.is_available():
             type=["jpg", "jpeg", "png", "webp"],
             key="receipt_upload",
         )
-        if uploaded is not None and st.button("🔍 読み取り", use_container_width=True):
+        # モバイルで「写真を撮る」を選ぶとカメラアプリ切替中にWebSocketが切断され、
+        # 1回目のアップロードが失われることがある。ページを離れず撮影できる
+        # ブラウザ内カメラを代替手段として用意する
+        use_camera = st.toggle("📸 その場で撮影する", key="receipt_use_camera")
+        photo = None
+        if use_camera:
+            photo = st.camera_input("レシートを撮影", key="receipt_camera")
+        image = photo if photo is not None else uploaded
+        if image is not None and st.button("🔍 読み取り", use_container_width=True):
             with st.spinner("読み取り中..."):
                 try:
                     result = receipt_reader.extract_receipt(
-                        uploaded.getvalue(), gas_stations
+                        image.getvalue(), gas_stations
                     )
                     st.session_state["receipt_result"] = result
                     st.rerun()
@@ -202,6 +210,8 @@ with st.form("refueling_form"):
             st.session_state["just_registered"] = True
             st.session_state.pop("receipt_result", None)
             st.session_state.pop("receipt_upload", None)
+            st.session_state.pop("receipt_camera", None)
+            st.session_state.pop("receipt_use_camera", None)
             st.rerun()
 
 # 前回の記録を表示
