@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; font-family: sans-serif; }
+  video, #photo { width: 100%; display: block; border-radius: 8px; background: #000; }
+  #controls { display: flex; gap: 8px; margin-top: 8px; }
+  #controls button {
+    padding: 12px; font-size: 16px; border-radius: 8px;
+    border: 1px solid #ccc; background: #fff; cursor: pointer;
+  }
+  #shoot { flex: 1; background: #ff4b4b; color: #fff; border: none; font-weight: bold; }
+  #retake { flex: 1; }
+  #flip { width: 56px; }
+  #err { color: #d00; padding: 8px 0; font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="err" class="hidden"></div>
+<video id="video" autoplay playsinline muted></video>
+<img id="photo" class="hidden" alt="captured receipt"/>
+<div id="controls">
+  <button id="shoot" type="button">📸 撮影</button>
+  <button id="retake" type="button" class="hidden">↩️ 撮り直す</button>
+  <button id="flip" type="button" title="カメラ切替">🔄</button>
+</div>
+<script>
+// Streamlit カスタムコンポーネント プロトコル（streamlit-component-lib 相当を素で実装）
+function send(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+}
+function setValue(v) { send("streamlit:setComponentValue", { value: v, dataType: "json" }); }
+function setHeight() { send("streamlit:setFrameHeight", { height: document.body.scrollHeight + 8 }); }
+
+var stream = null;
+var facing = "environment"; // レシート撮影が目的なのでアウトカメラを既定にする
+var video = document.getElementById("video");
+var photo = document.getElementById("photo");
+var shoot = document.getElementById("shoot");
+var retake = document.getElementById("retake");
+var flip = document.getElementById("flip");
+var err = document.getElementById("err");
+
+function stopStream() {
+  if (stream) {
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null;
+  }
+}
+
+function startStream() {
+  stopStream();
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false
+  }).then(function (s) {
+    stream = s;
+    video.srcObject = s;
+    err.classList.add("hidden");
+    setTimeout(setHeight, 300);
+  }).catch(function (e) {
+    err.textContent = "カメラを起動できませんでした（" + e.name + "）。ブラウザのカメラ許可を確認するか、「画像を選ぶ」を使ってください。";
+    err.classList.remove("hidden");
+    setTimeout(setHeight, 100);
+  });
+}
+
+shoot.addEventListener("click", function () {
+  var w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) { return; }
+  // API送信用に長辺1568px・JPEGに縮小してから送る（websocket負荷の抑制）
+  var MAX = 1568;
+  var scale = Math.min(1, MAX / Math.max(w, h));
+  var c = document.createElement("canvas");
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
+  var dataUrl = c.toDataURL("image/jpeg", 0.85);
+  photo.src = dataUrl;
+  photo.classList.remove("hidden");
+  video.classList.add("hidden");
+  shoot.classList.add("hidden");
+  flip.classList.add("hidden");
+  retake.classList.remove("hidden");
+  stopStream();
+  setValue(dataUrl);
+  setTimeout(setHeight, 100);
+});
+
+retake.addEventListener("click", function () {
+  photo.classList.add("hidden");
+  video.classList.remove("hidden");
+  retake.classList.add("hidden");
+  shoot.classList.remove("hidden");
+  flip.classList.remove("hidden");
+  setValue(null);
+  startStream();
+});
+
+flip.addEventListener("click", function () {
+  facing = (facing === "environment") ? "user" : "environment";
+  startStream();
+});
+
+video.addEventListener("loadedmetadata", setHeight);
+
+send("streamlit:componentReady", { apiVersion: 1 });
+setHeight();
+startStream();
+</script>
+</body>
+</html>
