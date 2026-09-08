@@ -39,19 +39,34 @@ receipt = st.session_state.get("receipt_result", {})
 
 if receipt_reader is not None and receipt_reader.is_available():
     with st.expander("📷 レシートから読み取り", expanded=not receipt):
-        uploaded = st.file_uploader(
-            "レシート画像",
-            type=["jpg", "jpeg", "png", "webp"],
-            key="receipt_upload",
+        # モバイルでfile_uploaderの「カメラ」を選ぶとカメラアプリ切替中に
+        # WebSocketが切断され1回目のアップロードが失われることがあるため、
+        # ページを離れず撮影できるブラウザ内カメラを主経路として用意する。
+        # 両widgetを同時に出すと紛らわしいので切り替え式にする
+        mode = st.radio(
+            "画像の入力方法",
+            ["📁 画像を選ぶ", "📸 その場で撮影"],
+            horizontal=True,
+            label_visibility="collapsed",
+            key="receipt_mode",
         )
-        # モバイルで「写真を撮る」を選ぶとカメラアプリ切替中にWebSocketが切断され、
-        # 1回目のアップロードが失われることがある。ページを離れず撮影できる
-        # ブラウザ内カメラを代替手段として用意する
-        use_camera = st.toggle("📸 その場で撮影する", key="receipt_use_camera")
-        photo = None
-        if use_camera:
-            photo = st.camera_input("レシートを撮影", key="receipt_camera")
-        image = photo if photo is not None else uploaded
+        if mode == "📸 その場で撮影":
+            # カメラプレビューをコンテナ幅いっぱいに広げる
+            st.markdown(
+                "<style>[data-testid='stCameraInput'] video {width: 100%;}</style>",
+                unsafe_allow_html=True,
+            )
+            image = st.camera_input("レシートを撮影", key="receipt_camera")
+        else:
+            image = st.file_uploader(
+                "レシート画像",
+                type=["jpg", "jpeg", "png", "webp"],
+                key="receipt_upload",
+            )
+            st.caption(
+                "※ Uploadの選択肢から「カメラ」を選ぶと1回目に失敗することがあります。"
+                "撮影する場合は「📸 その場で撮影」を使ってください"
+            )
         if image is not None and st.button("🔍 読み取り", use_container_width=True):
             with st.spinner("読み取り中..."):
                 try:
@@ -211,7 +226,7 @@ with st.form("refueling_form"):
             st.session_state.pop("receipt_result", None)
             st.session_state.pop("receipt_upload", None)
             st.session_state.pop("receipt_camera", None)
-            st.session_state.pop("receipt_use_camera", None)
+            st.session_state.pop("receipt_mode", None)
             st.rerun()
 
 # 前回の記録を表示
