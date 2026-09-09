@@ -16,7 +16,7 @@
   #controls {
     position: absolute; left: 0; right: 0; bottom: 0;
     display: flex; align-items: center; justify-content: center; gap: 20px;
-    padding: 14px 12px;
+    padding: 14px 12px 22px;
     background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
   }
   #controls button {
@@ -64,12 +64,30 @@ function setValue(v) { send("streamlit:setComponentValue", { value: v, dataType:
 function setHeight() { send("streamlit:setFrameHeight", { height: document.body.scrollHeight + 8 }); }
 
 // プレビューの高さ上限を親ページ（Streamlit）の画面高さから決める。
-// 見出し・入力方法のラジオ・下の余白ぶんを差し引き、極端な値にならないよう丸める。
+// 同一オリジンなので iframe 自身の位置（ページ先頭からのオフセット）が取れる。
+// 「画面高さ − iframe の位置 − 下余白」にすると、スクロールなしで
+// 映像と撮影ボタンが画面内に収まる。取れない場合は固定値で代用する。
+var BOTTOM_MARGIN = 72;   // 画面下端とプレビュー下端の間に空ける余白(px)
+var FALLBACK_OFFSET = 340; // iframe 位置が取れないときに見出し等の分として引く値(px)
 function updateMaxHeight() {
-  var parentH = 0;
-  try { parentH = window.parent.innerHeight || 0; } catch (e) { parentH = 0; }
-  var h = parentH ? parentH - 260 : 480;
-  h = Math.max(240, Math.min(h, 640));
+  var h = 480;
+  try {
+    var p = window.parent;
+    var fe = window.frameElement;
+    if (p && p.innerHeight) {
+      if (fe) {
+        // Streamlit は window ではなく内側のコンテナがスクロールするので、
+        // 祖先の scrollTop を足し込んで「先頭までスクロールした状態」の位置にする
+        var top = fe.getBoundingClientRect().top + (p.scrollY || 0);
+        var el = fe.parentElement;
+        while (el) { top += el.scrollTop || 0; el = el.parentElement; }
+        h = p.innerHeight - top - BOTTOM_MARGIN;
+      } else {
+        h = p.innerHeight - FALLBACK_OFFSET;
+      }
+    }
+  } catch (e) { /* クロスオリジン等で親に触れない場合は既定値 */ }
+  h = Math.max(240, Math.min(Math.round(h), 640));
   document.documentElement.style.setProperty("--max-h", h + "px");
   setTimeout(setHeight, 50);
 }
@@ -151,6 +169,8 @@ window.addEventListener("orientationchange", updateMaxHeight);
 
 send("streamlit:componentReady", { apiVersion: 1 });
 updateMaxHeight();
+setTimeout(updateMaxHeight, 500);
+setTimeout(updateMaxHeight, 1500);
 startStream();
 </script>
 </body>
