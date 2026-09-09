@@ -3,28 +3,57 @@
 <head>
 <meta charset="utf-8">
 <style>
+  :root { --max-h: 480px; }
   html, body { margin: 0; padding: 0; background: transparent; font-family: sans-serif; }
-  video, #photo { width: 100%; display: block; border-radius: 8px; background: #000; }
-  #controls { display: flex; gap: 8px; margin-top: 8px; }
-  #controls button {
-    padding: 12px; font-size: 16px; border-radius: 8px;
-    border: 1px solid #ccc; background: #fff; cursor: pointer;
+  /* 映像の上にボタンを重ねるためのステージ */
+  #stage { position: relative; min-height: 200px; border-radius: 8px; overflow: hidden; background: #000; }
+  video, #photo {
+    width: 100%; max-height: var(--max-h); display: block;
+    /* 縦長映像でも高さを収める。cover だとプレビューと撮影画像がズレるので contain */
+    object-fit: contain; background: #000;
   }
-  #shoot { flex: 1; background: #ff4b4b; color: #fff; border: none; font-weight: bold; }
-  #retake { flex: 1; }
-  #flip { width: 56px; }
+  /* 撮影ボタン類を映像の下端に重ねる（ネイティブのカメラアプリ風） */
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center; gap: 20px;
+    padding: 14px 12px;
+    background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
+  }
+  #controls button {
+    cursor: pointer; border: none; color: #fff; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shoot {
+    width: 68px; height: 68px; border-radius: 50%;
+    background: #fff; border: 4px solid rgba(255,255,255,0.5);
+    box-shadow: 0 0 0 3px #ff4b4b inset, 0 2px 8px rgba(0,0,0,0.4);
+    font-size: 26px;
+  }
+  #shoot:active { transform: scale(0.94); }
+  #retake {
+    padding: 12px 20px; border-radius: 999px; font-weight: bold;
+    background: rgba(255,255,255,0.92); color: #333;
+  }
+  #flip {
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; border-radius: 50%; font-size: 20px;
+    background: rgba(0,0,0,0.45);
+  }
   #err { color: #d00; padding: 8px 0; font-size: 14px; }
   .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <div id="err" class="hidden"></div>
-<video id="video" autoplay playsinline muted></video>
-<img id="photo" class="hidden" alt="captured receipt"/>
-<div id="controls">
-  <button id="shoot" type="button">📸 撮影</button>
-  <button id="retake" type="button" class="hidden">↩️ 撮り直す</button>
-  <button id="flip" type="button" title="カメラ切替">🔄</button>
+<div id="stage">
+  <video id="video" autoplay playsinline muted></video>
+  <img id="photo" class="hidden" alt="captured receipt"/>
+  <div id="controls">
+    <button id="shoot" type="button" title="撮影">📸</button>
+    <button id="retake" type="button" class="hidden">↩️ 撮り直す</button>
+    <button id="flip" type="button" title="カメラ切替">🔄</button>
+  </div>
 </div>
 <script>
 // Streamlit カスタムコンポーネント プロトコル（streamlit-component-lib 相当を素で実装）
@@ -33,6 +62,17 @@ function send(type, data) {
 }
 function setValue(v) { send("streamlit:setComponentValue", { value: v, dataType: "json" }); }
 function setHeight() { send("streamlit:setFrameHeight", { height: document.body.scrollHeight + 8 }); }
+
+// プレビューの高さ上限を親ページ（Streamlit）の画面高さから決める。
+// 見出し・入力方法のラジオ・下の余白ぶんを差し引き、極端な値にならないよう丸める。
+function updateMaxHeight() {
+  var parentH = 0;
+  try { parentH = window.parent.innerHeight || 0; } catch (e) { parentH = 0; }
+  var h = parentH ? parentH - 260 : 480;
+  h = Math.max(240, Math.min(h, 640));
+  document.documentElement.style.setProperty("--max-h", h + "px");
+  setTimeout(setHeight, 50);
+}
 
 var stream = null;
 var facing = "environment"; // レシート撮影が目的なのでアウトカメラを既定にする
@@ -105,9 +145,12 @@ flip.addEventListener("click", function () {
 });
 
 video.addEventListener("loadedmetadata", setHeight);
+photo.addEventListener("load", setHeight);
+window.addEventListener("resize", updateMaxHeight);
+window.addEventListener("orientationchange", updateMaxHeight);
 
 send("streamlit:componentReady", { apiVersion: 1 });
-setHeight();
+updateMaxHeight();
 startStream();
 </script>
 </body>
